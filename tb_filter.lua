@@ -1,6 +1,10 @@
 local tb = {}
 
--- see if the file exists
+---------------
+--   Utils   --
+---------------
+
+-- check if a given file path exists
 function tb.file_exists(file)
   local f = io.open(file, "rb")
   if f then f:close() end
@@ -18,6 +22,7 @@ function tb.lines_from(file)
   return lines
 end
 
+-- creates an indented string representation of nested tables
 function tb.table_to_pretty_string(tbl, prefix)
 	str_out = ""
 	if prefix == nil then
@@ -34,6 +39,7 @@ function tb.table_to_pretty_string(tbl, prefix)
 	return str_out
 end
 
+-- helper function for printing log information to stdout
 function tb.print_log(...)
     local n = select("#",...)
     for i = 1,n do
@@ -44,45 +50,55 @@ function tb.print_log(...)
     io.write'\n'
 end
 
+-- print informative messages
 function tb.log_info(...)
 	tb.print_log("[info ] ", ...)
 end
 
+-- print debug messages
 function tb.log_debug(...)
 	tb.print_log("[debug] ", ...)
 end
 
+-- print error messages
 function tb.log_error(...)
 	tb.print_log("[error] ", ...)
 end
 
+-- returns the mailbox name of a thunderbird url mailbox 
 function tb.url_to_mailbox(url_str)
 	return regex_search("imap:\\/\\/.*@.*?\\/(?:INBOX\\/)?(.*)", url_str)
 end
 
+-- performs thunderbird "mark seen" action
 function tb.action_mark_seen(account, results, value)
 	tb.log_info("Marking seen")
 	results:mark_seen()
 end
 
+-- performs thunderbird "mark unseen" action
 function tb.action_mark_unseen(account, results, value)
 	tb.log_info("Marking unseen.")
 	results:mark_unseen()
 end
 
+-- performs thunderbird "add tag" action
 function tb.action_add_tag(account, results, value)
 	tb.log_info("Adding tag: " .. value)
 	results:add_flags({value})
 end
 
+-- performs thunderbird "mark flagged" action
 function tb.action_mark_flagged(account, results, value)
 	results:mark_flagged()
 end
 
+-- performs thunderbird "delete messages" action
 function tb.action_delete_messages(account, reults, value)
 	results:delete_messages()
 end 
 
+-- performs thunderbird "move to folder" action
 function tb.action_move_to_folder(account, results, value)
 	fnd_mbox, mbox_str = tb.url_to_mailbox(value)
 
@@ -94,6 +110,7 @@ function tb.action_move_to_folder(account, results, value)
 	results:move_messages(account[mbox_str])
 end
 
+-- performs thunderbird "copy to folder" action
 function tb.action_copy_to_folder(account, results, value)
 	fnd_mbox, mbox_str = tb.url_to_mailbox(value)
 
@@ -105,16 +122,19 @@ function tb.action_copy_to_folder(account, results, value)
 	results:copy_messages(account[mbox_str])
 end
 
+-- extracts parenthesized fields from thunderbird filter rule
 function tb.parse_custom_field(field)
 	fnd, match = regex_search("\\\\\"(.*)\\\\\"", field)
 	return match
 end
 
+-- returns true if the string field contains a word in escaped quotes
 function tb.is_custom_field(field)
 	fnd, match = regex_search("\\\\\"(.*)\\\\\"", field)
 	return fnd
 end
 
+-- applys a filter conditions which is based on a mail field
 function tb.apply_field_condition(mailbox, field, condition, value)
 	if condition == "contains" then
 		results = mailbox:contain_field(field, value)
@@ -137,6 +157,7 @@ function tb.apply_field_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- applys a filter conditions which is based on the messages' date
 function tb.apply_date_condition(mailbox, field, condition, value)
 	if condition == "is" then
 		results = mailbox:arrived_on(value)
@@ -150,6 +171,7 @@ function tb.apply_date_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- applys a filter condition which is based on the messages' status
 function tb.apply_status_condition(mailbox, field, condition, value)
 	if condition == "is" then
 		if value == "replied" then
@@ -182,6 +204,7 @@ function tb.apply_status_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- applys a filter condition which is based on the messages' age
 function tb.apply_age_in_days_condition(mailbox, field, condition, value)
 	age = tonumber(value)
 	date = form_date(age)
@@ -199,6 +222,7 @@ function tb.apply_age_in_days_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- applys a filter condition which is based on the messages' size
 function tb.apply_size_condition(mailbox, field, condition, value)
 	size = tonumber(value)
 	size = size*1024
@@ -213,6 +237,7 @@ function tb.apply_size_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- applys a filter condition which is based on the messages' tags
 function tb.apply_tag_condition(mailbox, field, condition, value)
 	if condition == "contains" then
 		results = mailbox:has_keyword(value)
@@ -235,6 +260,7 @@ function tb.apply_tag_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- applys a filter condition which is based on the messages' body
 function tb.apply_body_condition(mailbox, field, condition, value)
 	if condition == "contains" then
 		results = mailbox:contain_body(value)
@@ -254,6 +280,7 @@ function tb.apply_body_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- applys a general thunderbird filter condition
 function tb.apply_condition(mailbox, field, condition, value)
 	if field == "from" or field == "subject" or field == "to" or field == "cc" then
 		results = tb.apply_field_condition(mailbox, field, condition, value)
@@ -285,6 +312,18 @@ function tb.apply_condition(mailbox, field, condition, value)
 	return results
 end
 
+-- apply a table of thunderbird conditions
+-- conditions is table of tables containing an operator(string), a field(string), a condition(string) and a value(string)
+--[[
+Apply a table of thunderbird conditions
+
+Arguments:
+mailbox (table) -> mailbox or imapfilter messages on which to apply the conditions
+conditions (table) -> table of tables containing:
+    operator(string) -> logical operator (AND or OR)
+    field (string) -> which mail-field (eg. size, date, body) the filter operats on
+    condition (string) -> the condition 
+    values (string) -> the value of the condition
 function tb.apply_conditions(mailbox, conditions)
 	key, values = next(conditions, nil)
 	tb.log_debug(unpack(values))
@@ -305,6 +344,15 @@ function tb.apply_conditions(mailbox, conditions)
 	return filtered_msgs
 end
 
+--[[
+Parses the thunderbird filter condition string
+
+Arguments:
+condition_string (string) -> value of the condition-keyword
+
+Returns:
+a table of tables each containt an operator(string, a filed(string), a condition(string) and a value(string)
+]]--
 function tb.parse_conditions(condition_string)
 	regex_cmd = "((OR|AND) \\(.+?,.+?,.+?\\))"
 	regex_args = "(?:OR|AND) \\((.+?),(.+?),(.+?)\\)"
@@ -322,9 +370,20 @@ function tb.parse_conditions(condition_string)
 	return conditions
 end
 
+--[[
+Parses a single line of thunderbird's msgFilterRules.dat file
+
+Arguments:
+line (string) -> a single line of the filter rules
+
+Returns:
+is_well_formatted (boolean) -> true if the line is of the format key="value"
+key (string) -> the filter keyword
+value (string) -> the filter value
+]]--
 function tb.parse_filter_line(line)
-	fnd, key, value = regex_search("(?m)^(.+?)=\\\"(.*)\\\"\\s*$", line)
-	return fnd, key, value
+	is_well_formatted, key, value = regex_search("(?m)^(.+?)=\\\"(.*)\\\"\\s*$", line)
+	return is_well_formatted, key, value
 end
 
 --[[
@@ -376,6 +435,12 @@ function tb.parse_filter_rules(filter_lines)
 	return rules
 end
 
+--[[
+applys a table of filter actions on the given messages
+acc (table) -> imap account
+actions (table) -> table of tables each containing an action(string) and a value(string)
+msgs (table) -> a table of imapfilter messages on which to perform the actions
+]]--
 function tb.do_actions(acc, actions, msgs)
 	for key, action_tbl in pairs(actions) do
 		action, value = unpack(action_tbl)
@@ -412,6 +477,12 @@ function tb.do_actions(acc, actions, msgs)
 	end
 end
 
+--[[
+executes a thunderbird filter rules
+account (table) -> account on which to perform the rules
+target (table) -> mailbox or table of imapfilter messages on which to perform the rules
+filter_rules (table) -> table of strings containing the msgFilterRules.dat content
+]]--
 function tb.execute_filters(account, target, filter_rules)
 	for key, filter in pairs(filter_rules) do
 		if filter["enabled"] then
@@ -427,6 +498,12 @@ function tb.execute_filters(account, target, filter_rules)
 	end
 end
 
+--[[
+Parses a thunderbird msgFilterRules.dat file and applys the filter rules
+account (table) -> account on which to perform the rules
+target (table) -> mailbox or table of imapfilter messages on which to perform the rules
+file_name (string) -> path of a thunderbird msgFilterRules.dat file
+]]--
 function tb.do_thunderbird_filter(account, target, file_name)
         tb.log_info("Running thunderbird filters from: " .. file_name)
 	lines = tb.lines_from(file_name)
