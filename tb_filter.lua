@@ -312,8 +312,6 @@ function tb.apply_condition(mailbox, field, condition, value)
 	return results
 end
 
--- apply a table of thunderbird conditions
--- conditions is table of tables containing an operator(string), a field(string), a condition(string) and a value(string)
 --[[
 Apply a table of thunderbird conditions
 
@@ -324,6 +322,7 @@ conditions (table) -> table of tables containing:
     field (string) -> which mail-field (eg. size, date, body) the filter operats on
     condition (string) -> the condition 
     values (string) -> the value of the condition
+]]--
 function tb.apply_conditions(mailbox, conditions)
 	key, values = next(conditions, nil)
 	tb.log_debug(unpack(values))
